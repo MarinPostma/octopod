@@ -1,13 +1,14 @@
 use std::net::IpAddr;
 
 use anyhow::Context;
+use maplit::hashmap;
 use podman_api::{
     opts::{ContainerCreateOpts, ContainerDeleteOpts, NetworkCreateOpts},
     Podman,
 };
 use uuid::Uuid;
 
-use crate::{Network, Resources, Service, ServiceConfig};
+use crate::{resource::Resources, Network, Service, ServiceConfig};
 
 #[derive(Clone)]
 pub(crate) struct Driver {
@@ -41,7 +42,7 @@ impl Driver {
         resources: &mut Resources,
     ) -> anyhow::Result<Service> {
         let opts = ContainerCreateOpts::builder()
-            .networks([(net.name(), ())])
+            .networks([(net.name(), hashmap! { "aliases" => vec![&config.name]})])
             .image(&config.image)
             .env(config.env.clone())
             .build();
@@ -60,7 +61,7 @@ impl Driver {
         Ok(service)
     }
 
-    pub async fn destroy_network(&self, network: Network) -> anyhow::Result<()> {
+    pub async fn destroy_network(&self, network: &Network) -> anyhow::Result<()> {
         // remove destroy all the containers associated with the network as well
         self.api.networks().get(network.name()).remove().await?;
         Ok(())
@@ -85,10 +86,10 @@ impl Driver {
         Ok(ip)
     }
 
-    pub async fn destroy_service(&self, service: Service) -> anyhow::Result<()> {
+    pub async fn destroy_service(&self, service: &Service) -> anyhow::Result<()> {
         let container = self.api.containers().get(&service.id);
         container
-            .delete(&ContainerDeleteOpts::builder().build())
+            .delete(&ContainerDeleteOpts::builder().force(true).build())
             .await?;
 
         Ok(())

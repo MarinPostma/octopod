@@ -11,7 +11,7 @@ use std::net::IpAddr;
 use anyhow::Context;
 use driver::Driver;
 use emitter::{Emitter, TestResult};
-use podman_api::models::Resources;
+use resource::Resources;
 use sealed::{TestDecl, TestFn};
 
 pub use octopod_macros::test;
@@ -96,7 +96,7 @@ impl TestSuite {
             services.insert(config.name.clone(), service);
         }
 
-        Ok(App { services, network })
+        Ok(App { services })
     }
 
     async fn run(
@@ -107,7 +107,6 @@ impl TestSuite {
     ) -> anyhow::Result<()> {
         for Test { name, f } in &self.tests {
             let app = self.instantiate_app(driver, resources).await?;
-            let net = app.network.clone();
             let fut = f.call(app);
             //FIXME: Maybe we should fork here, and collect stdout
             let result = match tokio::spawn(fut).await {
@@ -133,7 +132,6 @@ impl Network {
 }
 
 pub struct App {
-    network: Network,
     services: HashMap<String, Service>,
 }
 
