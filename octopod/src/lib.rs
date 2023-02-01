@@ -1,11 +1,16 @@
+#[doc(hidden)]
+pub mod sealed;
+
 use std::collections::HashMap;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
 
-use podman_api::opts::{ContainerCreateOpts, ContainerDeleteOpts, NetworkCreateOpts};
+use podman_api::opts::{ContainerCreateOpts, NetworkCreateOpts};
 use podman_api::Podman;
 use uuid::Uuid;
+
+pub use octopod_macros::test;
 
 pub struct Orchestrator {
     driver: Driver,
@@ -195,10 +200,18 @@ impl App {
 
 #[derive(Clone, Debug, Default)]
 pub struct AppConfig {
+    name: String,
     services: Vec<ServiceConfig>,
 }
 
 impl AppConfig {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            services: Vec::new(),
+        }
+    }
+
     pub fn add_service(&mut self, config: ServiceConfig) {
         self.services.push(config);
     }

@@ -1,0 +1,16 @@
+[package]
+name = "octopod"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.68"
+futures = "0.3.26"
+# podman-api = "0.8.0"
+podman-api = { git = "https://github.com/vv9k/podman-api-rs.git"}
+tokio = "1.25.0"
+uuid = { version = "1.2.2", features = ["v4"] }
+octopod-macros = { path = "../octopod-macros" }
+inventory = "0.3.3"
