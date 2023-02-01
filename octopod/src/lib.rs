@@ -1,17 +1,18 @@
 #[doc(hidden)]
 pub mod sealed;
 
+mod driver;
 mod emitter;
+mod resource;
 
 use std::collections::HashMap;
 use std::net::IpAddr;
 
 use anyhow::Context;
+use driver::Driver;
 use emitter::{Emitter, TestResult};
-use podman_api::opts::{ContainerCreateOpts, NetworkCreateOpts};
-use podman_api::Podman;
+use podman_api::models::Resources;
 use sealed::{TestDecl, TestFn};
-use uuid::Uuid;
 
 pub use octopod_macros::test;
 
@@ -54,7 +55,12 @@ impl Octopod {
     pub async fn run(self) -> anyhow::Result<()> {
         let mut emitter = Emitter::default();
         for suite in self.suites {
-            suite.run(&self.driver, &mut emitter).await?;
+            let mut resources = Resources::default();
+            if let Err(e) = suite.run(&self.driver, &mut emitter, &mut resources).await {
+                eprintln!("error running test suite: {e}");
+            }
+
+            resources.cleanup(&self.driver).await;
         }
 
         Ok(())
@@ -70,7 +76,6 @@ struct TestSuite {
     app: AppConfig,
     tests: Vec<Test>,
 }
-
 impl TestSuite {
     fn new(app: AppConfig) -> Self {
         Self {
@@ -79,37 +84,41 @@ impl TestSuite {
         }
     }
 
-    async fn instantiate_app(&self, driver: &Driver) -> anyhow::Result<App> {
-        let network = driver.network().await?;
+    async fn instantiate_app(
+        &self,
+        driver: &Driver,
+        resources: &mut Resources,
+    ) -> anyhow::Result<App> {
+        let network = driver.network(resources).await?;
         let mut services = HashMap::new();
         for config in &self.app.services {
-            let service = driver.service(config, &network).await?;
+            let service = driver.service(config, &network, resources).await?;
             services.insert(config.name.clone(), service);
         }
 
         Ok(App { services, network })
     }
 
-    async fn run(self, driver: &Driver, emitter: &mut Emitter) -> anyhow::Result<()> {
+    async fn run(
+        self,
+        driver: &Driver,
+        emitter: &mut Emitter,
+        resources: &mut Resources,
+    ) -> anyhow::Result<()> {
         for Test { name, f } in &self.tests {
-            let app = self.instantiate_app(driver).await?;
+            let app = self.instantiate_app(driver, resources).await?;
             let net = app.network.clone();
             let fut = f.call(app);
+            //FIXME: Maybe we should fork here, and collect stdout
             let result = match tokio::spawn(fut).await {
                 Ok(_) => TestResult::pass(name),
                 Err(e) => TestResult::fail(name, &e),
             };
             emitter.emit(result);
-            // destroying network will remove all associated containers.
-            driver.destroy_network(net).await?;
         }
 
         Ok(())
     }
-}
-
-pub struct Driver {
-    api: Podman,
 }
 
 #[derive(Clone, Debug)]
@@ -120,56 +129,6 @@ struct Network {
 impl Network {
     fn name(&self) -> &str {
         &self.name
-    }
-}
-
-impl Driver {
-    pub fn new(addr: &str) -> anyhow::Result<Self> {
-        let api = Podman::new(addr)?;
-        Ok(Self { api })
-    }
-
-    async fn network(&self) -> anyhow::Result<Network> {
-        let name = Uuid::new_v4().to_string();
-        let opts = NetworkCreateOpts::builder()
-            .name(&name)
-            .dns_enabled(true)
-            .build();
-        self.api.networks().create(&opts).await?;
-
-        Ok(Network { name })
-    }
-
-    async fn service(&self, config: &ServiceConfig, net: &Network) -> anyhow::Result<Service> {
-        let opts = ContainerCreateOpts::builder()
-            .networks([(net.name(), ())])
-            .image(&config.image)
-            .env(config.env.clone())
-            .build();
-        let resp = self.api.containers().create(&opts).await?;
-        let container = self.api.containers().get(&resp.id);
-        container.start(None).await?;
-        let meta = container.inspect().await?;
-        // TODO: error handling
-        let ip = meta
-            .network_settings
-            .unwrap()
-            .networks
-            .unwrap()
-            .get(net.name())
-            .unwrap()
-            .ip_address
-            .as_ref()
-            .unwrap()
-            .parse()?;
-
-        Ok(Service { id: resp.id, ip })
-    }
-
-    async fn destroy_network(&self, network: Network) -> anyhow::Result<()> {
-        // remove destroy all the containers associated with the network as well
-        self.api.networks().get(network.name()).remove().await?;
-        Ok(())
     }
 }
 
@@ -210,16 +169,17 @@ pub struct ServiceConfig {
     pub env: Vec<(String, String)>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[allow(dead_code)]
 pub struct Service {
-    ip: IpAddr,
+    net: Network,
     id: String,
+    driver: Driver,
 }
 
 impl Service {
     /// Ip of this service
-    pub fn ip(&self) -> IpAddr {
-        self.ip
+    pub async fn ip(&self) -> anyhow::Result<IpAddr> {
+        self.driver.get_service_ip(self).await
     }
 }
