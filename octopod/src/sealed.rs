@@ -24,6 +24,6 @@ where
 #[doc(hidden)]
 pub struct TestDecl {
     pub name: &'static str,
-    pub target_apps: &'static [&'static str],
+    pub app: &'static str,
     pub f: &'static dyn TestFn,
 }

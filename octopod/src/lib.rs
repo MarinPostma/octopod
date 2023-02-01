@@ -2,40 +2,54 @@
 pub mod sealed;
 
 use std::collections::HashMap;
-use std::future::Future;
 use std::net::IpAddr;
-use std::pin::Pin;
 
+use anyhow::Context;
 use podman_api::opts::{ContainerCreateOpts, NetworkCreateOpts};
 use podman_api::Podman;
+use sealed::{TestDecl, TestFn};
 use uuid::Uuid;
 
 pub use octopod_macros::test;
 
-pub struct Orchestrator {
+pub struct Octopod {
     driver: Driver,
-    test_suites: Vec<TestSuite>,
+    suites: Vec<TestSuite>,
 }
 
-impl Orchestrator {
-    pub fn new(driver: Driver) -> Self {
-        Self {
-            driver,
-            test_suites: Vec::new(),
+impl Octopod {
+    /// Initialize Octopod, sets up the connection to the podman API, and collects all tests.
+    /// An error is returned if an app is used within a test, and is not registered on
+    /// initialization.
+    pub fn init(podman_addr: &str, apps: Vec<AppConfig>) -> anyhow::Result<Self> {
+        let mut suites: HashMap<String, TestSuite> = HashMap::new();
+        for config in apps {
+            let name = config.name.clone();
+            let suite = TestSuite::new(config.clone());
+            suites.insert(name, suite);
         }
-    }
-    /// Registers a test suite with this orchestrator
-    pub fn test_suite<'a>(&'a mut self, app: AppConfig) -> TestSuiteBuilder<'a> {
-        TestSuiteBuilder {
-            app,
-            tests: Vec::new(),
-            orchestrator: self,
+
+        for decl in inventory::iter::<TestDecl>() {
+            let test = Test {
+                f: decl.f,
+                name: decl.name.into(),
+            };
+
+            suites
+                .get_mut(decl.app)
+                .with_context(|| format!("unknown app `{}` in test `{}`", decl.app, decl.name))?
+                .tests
+                .push(test);
         }
+
+        let suites = suites.into_values().collect();
+        let driver = Driver::new(podman_addr)?;
+
+        Ok(Self { driver, suites })
     }
 
-    pub async fn start(self) -> anyhow::Result<()> {
-        dbg!(self.test_suites.len());
-        for suite in self.test_suites {
+    pub async fn run(self) -> anyhow::Result<()> {
+        for suite in self.suites {
             suite.run(&self.driver).await?;
         }
 
@@ -43,37 +57,8 @@ impl Orchestrator {
     }
 }
 
-pub struct TestSuiteBuilder<'a> {
-    app: AppConfig,
-    tests: Vec<Test>,
-    orchestrator: &'a mut Orchestrator,
-}
-
-impl<'a> TestSuiteBuilder<'a> {
-    pub fn test(
-        mut self,
-        name: String,
-        test: impl Fn(&App) -> Pin<Box<dyn Future<Output = ()> + Sync + Send>> + 'static,
-    ) -> Self {
-        self.tests.push(Test {
-            f: Box::new(test),
-            name,
-        });
-        self
-    }
-
-    pub fn build(self) {
-        if !self.tests.is_empty() {
-            self.orchestrator.test_suites.push(TestSuite {
-                app: self.app,
-                tests: self.tests,
-            });
-        }
-    }
-}
-
 struct Test {
-    f: Box<dyn Fn(&App) -> Pin<Box<dyn Future<Output = ()> + Send + Sync>>>,
+    f: &'static dyn TestFn,
     name: String,
 }
 
@@ -83,31 +68,35 @@ struct TestSuite {
 }
 
 impl TestSuite {
+    fn new(app: AppConfig) -> Self {
+        Self {
+            app,
+            tests: Vec::new(),
+        }
+    }
+
     async fn instantiate_app(&self, driver: &Driver) -> anyhow::Result<App> {
-        dbg!();
         let network = driver.network().await?;
-        dbg!();
         let mut services = HashMap::new();
         for config in &self.app.services {
-            dbg!();
             let service = driver.service(config, &network).await?;
             services.insert(config.name.clone(), service);
         }
-        dbg!();
 
         Ok(App { services, network })
     }
 
     async fn run(self, driver: &Driver) -> anyhow::Result<()> {
         for Test { name, f } in &self.tests {
-            dbg!(&name);
             let app = self.instantiate_app(driver).await?;
-            let fut = f(&app);
+            let net = app.network.clone();
+            let fut = f.call(app);
             let res = tokio::spawn(fut).await;
             if let Err(e) = res {
                 println!("{name} failed: {e}");
             }
-            app.destroy(driver).await?;
+            // destroying network will remove all associated containers.
+            driver.destroy_network(net).await?;
         }
 
         Ok(())
@@ -118,6 +107,7 @@ pub struct Driver {
     api: Podman,
 }
 
+#[derive(Clone, Debug)]
 struct Network {
     name: String,
 }
@@ -129,8 +119,8 @@ impl Network {
 }
 
 impl Driver {
-    pub fn new() -> anyhow::Result<Self> {
-        let api = Podman::new("unix:///run/podman/podman.sock")?;
+    pub fn new(addr: &str) -> anyhow::Result<Self> {
+        let api = Podman::new(addr)?;
         Ok(Self { api })
     }
 
@@ -151,13 +141,11 @@ impl Driver {
             .image(&config.image)
             .env(config.env.clone())
             .build();
-        dbg!(&opts);
         let resp = self.api.containers().create(&opts).await?;
-        dbg!();
         let container = self.api.containers().get(&resp.id);
         container.start(None).await?;
         let meta = container.inspect().await?;
-        dbg!();
+        // TODO: error handling
         let ip = meta
             .network_settings
             .unwrap()
@@ -170,7 +158,6 @@ impl Driver {
             .unwrap()
             .parse()?;
 
-        dbg!();
         Ok(Service { id: resp.id, ip })
     }
 
@@ -187,14 +174,8 @@ pub struct App {
 }
 
 impl App {
-    async fn destroy(self, driver: &Driver) -> anyhow::Result<()> {
-        driver.destroy_network(self.network).await?;
-
-        Ok(())
-    }
-
-    pub fn dns_lookup(&self, service: &str) -> Option<IpAddr> {
-        self.services.get(service).map(|s| s.ip)
+    pub fn service(&self, service: &str) -> Option<&Service> {
+        self.services.get(service)
     }
 }
 
@@ -225,7 +206,15 @@ pub struct ServiceConfig {
 }
 
 #[derive(Debug, Clone)]
-struct Service {
+#[allow(dead_code)]
+pub struct Service {
     ip: IpAddr,
     id: String,
+}
+
+impl Service {
+    /// Ip of this service
+    pub fn ip(&self) -> IpAddr {
+        self.ip
+    }
 }
