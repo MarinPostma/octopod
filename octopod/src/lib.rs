@@ -1,10 +1,13 @@
 #[doc(hidden)]
 pub mod sealed;
 
+mod emitter;
+
 use std::collections::HashMap;
 use std::net::IpAddr;
 
 use anyhow::Context;
+use emitter::{Emitter, TestResult};
 use podman_api::opts::{ContainerCreateOpts, NetworkCreateOpts};
 use podman_api::Podman;
 use sealed::{TestDecl, TestFn};
@@ -49,8 +52,9 @@ impl Octopod {
     }
 
     pub async fn run(self) -> anyhow::Result<()> {
+        let mut emitter = Emitter::default();
         for suite in self.suites {
-            suite.run(&self.driver).await?;
+            suite.run(&self.driver, &mut emitter).await?;
         }
 
         Ok(())
@@ -86,15 +90,16 @@ impl TestSuite {
         Ok(App { services, network })
     }
 
-    async fn run(self, driver: &Driver) -> anyhow::Result<()> {
+    async fn run(self, driver: &Driver, emitter: &mut Emitter) -> anyhow::Result<()> {
         for Test { name, f } in &self.tests {
             let app = self.instantiate_app(driver).await?;
             let net = app.network.clone();
             let fut = f.call(app);
-            let res = tokio::spawn(fut).await;
-            if let Err(e) = res {
-                println!("{name} failed: {e}");
-            }
+            let result = match tokio::spawn(fut).await {
+                Ok(_) => TestResult::pass(name),
+                Err(e) => TestResult::fail(name, &e),
+            };
+            emitter.emit(result);
             // destroying network will remove all associated containers.
             driver.destroy_network(net).await?;
         }
@@ -179,7 +184,7 @@ impl App {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct AppConfig {
     name: String,
     services: Vec<ServiceConfig>,
