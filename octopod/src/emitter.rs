@@ -1,5 +1,7 @@
 use std::fmt;
 
+use termion::color;
+
 #[derive(Default)]
 pub struct Emitter {
     results: Vec<TestResult>,
@@ -46,10 +48,32 @@ pub struct LogLine {
     pub data: String,
 }
 
+impl LogLine {
+    /// picks unique color for this line name
+    fn name_color(&self) -> color::Rgb {
+        // CRC hash
+        let h = self.name.chars().fold(0u32, |mut h, c| {
+            let highorder = h & 0xf8000000;
+            h = h << 5;
+            h = h ^ (highorder >> 27);
+            h = h ^ c as u32;
+            h
+        });
+        let bytes = h.to_be_bytes();
+        color::Rgb(bytes[0], bytes[1], bytes[2])
+    }
+}
+
 impl fmt::Display for LogLine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for line in self.data.lines() {
-            write!(f, "{:<10}| {line}", self.name)?;
+            write!(
+                f,
+                "{}{:<10}|{} {line}",
+                color::Fg(self.name_color()),
+                self.name,
+                color::Fg(color::Reset)
+            )?;
         }
 
         Ok(())
