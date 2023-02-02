@@ -65,12 +65,10 @@ impl TestResult {
         }
     }
 
-    pub fn fail(name: &str, e: &dyn std::error::Error, logs: Option<Vec<LogLine>>) -> Self {
+    pub fn fail(name: &str, e: String, logs: Option<Vec<LogLine>>) -> Self {
         Self {
             name: name.to_string(),
-            outcome: TestOutcome::Fail {
-                output: e.to_string(),
-            },
+            outcome: TestOutcome::Fail { output: e },
             logs,
         }
     }

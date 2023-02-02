@@ -116,9 +116,23 @@ impl TestSuite {
             loop {
                 tokio::select! {
                     res = &mut test_fut => {
-                        let result = match  res {
+                        let result = match res {
                             Ok(_) => TestResult::pass(name, Some(logs)),
-                            Err(e) => TestResult::fail(name, &e, Some(logs)),
+                            Err(e) => {
+                                let msg = match e.try_into_panic() {
+                                    Ok(panic) => {
+                                        if let Some(e) = panic.downcast_ref::<&str>() {
+                                            e.to_string()
+                                        } else if let Ok(e) = panic.downcast::<String>() {
+                                            *e
+                                        } else {
+                                            "task panicked with no message".into()
+                                        }
+                                    }
+                                    Err(e) => e.to_string(),
+                                };
+                                TestResult::fail(name, msg, Some(logs))
+                            }
                         };
                         emitter.emit(result);
                         break;
