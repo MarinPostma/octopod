@@ -20,7 +20,7 @@ cargo add hyper --features h2
 
 Octopod has the concepts of `App` and `Service`. `Services` are containerised application, described using the `ServiceConfig` struct, an app in made one or more `Service`s talking to each over a network. All services within an app see each other and are adressable through their service name, thanks to podman built-in DNS.
 
-Let create a simple `App` consising of a single service:
+Lets create a simple `App` consising of a single service:
 
 ```rust
 use octopod::{AppConfig, Octopod, ServiceConfig};
@@ -36,7 +36,7 @@ async fn main() {
 
     Octopod::init(
         "unix:///var/run/docker.sock", // <- change this to the address podman is listening to
-        vec![app_cofig],
+        vec![app_config],
     )?
     .run()
     .await?;
@@ -47,7 +47,7 @@ async fn main() {
 We can now start writing tests against this service:
 
 ```rust
-#[octopod::test(app = "hello")]
+#[octopod::test(app = "echo")]
 async fn test(app: App) {
     // retrieve the ip address of the intanciated app
     let primary_ip = app.service("echo_service").unwrap().ip().await.unwrap();
