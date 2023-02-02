@@ -10,9 +10,10 @@ anyhow = "1.0.68"
 futures = "0.3.26"
 # podman-api = "0.8.0"
 podman-api = { git = "https://github.com/vv9k/podman-api-rs.git"}
-tokio = "1.25.0"
+tokio = { version = "1.25.0", features = ["macros"] }
 uuid = { version = "1.2.2", features = ["v4"] }
 octopod-macros = { path = "../octopod-macros" }
 inventory = "0.3.3"
 maplit = "1.0.2"
 async-trait = "0.1.64"
+tokio-stream = "0.1.11"

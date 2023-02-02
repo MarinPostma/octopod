@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Default)]
 pub struct Emitter {
     results: Vec<TestResult>,
@@ -21,7 +23,13 @@ impl Drop for Emitter {
         for result in &self.results {
             if let TestOutcome::Fail { ref output } = result.outcome {
                 println!("=== Test failure: {} ===", result.name);
-                println!("{output}")
+                println!("{output}");
+                if let Some(logs) = &result.logs {
+                    println!("Logs:");
+                    for entry in logs {
+                        println!("{entry}");
+                    }
+                }
             }
         }
     }
@@ -30,22 +38,40 @@ impl Drop for Emitter {
 pub struct TestResult {
     name: String,
     outcome: TestOutcome,
+    logs: Option<Vec<LogLine>>,
+}
+
+pub struct LogLine {
+    pub name: String,
+    pub data: String,
+}
+
+impl fmt::Display for LogLine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for line in self.data.lines() {
+            write!(f, "{:<10}| {line}", self.name)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl TestResult {
-    pub fn pass(name: &str) -> Self {
+    pub fn pass(name: &str, logs: Option<Vec<LogLine>>) -> Self {
         Self {
             name: name.to_string(),
             outcome: TestOutcome::Pass,
+            logs,
         }
     }
 
-    pub fn fail(name: &str, e: &dyn std::error::Error) -> Self {
+    pub fn fail(name: &str, e: &dyn std::error::Error, logs: Option<Vec<LogLine>>) -> Self {
         Self {
             name: name.to_string(),
             outcome: TestOutcome::Fail {
                 output: e.to_string(),
             },
+            logs,
         }
     }
 }

@@ -1,14 +1,15 @@
 use std::net::IpAddr;
 
 use anyhow::Context;
+use futures::{Stream, StreamExt};
 use maplit::hashmap;
 use podman_api::{
-    opts::{ContainerCreateOpts, ContainerDeleteOpts, NetworkCreateOpts},
+    opts::{ContainerCreateOpts, ContainerDeleteOpts, ContainerLogsOpts, NetworkCreateOpts},
     Podman,
 };
 use uuid::Uuid;
 
-use crate::{resource::Resources, Network, Service, ServiceConfig};
+use crate::{emitter::LogLine, resource::Resources, Network, Service, ServiceConfig};
 
 #[derive(Clone)]
 pub(crate) struct Driver {
@@ -51,6 +52,7 @@ impl Driver {
         container.start(None).await?;
 
         let service = Service {
+            name: config.name.clone(),
             id: resp.id,
             net: net.clone(),
             driver: self.clone(),
@@ -93,5 +95,38 @@ impl Driver {
             .await?;
 
         Ok(())
+    }
+
+    pub(crate) fn logs(&self, service: &Service) -> impl Stream<Item = LogLine> {
+        let name = service.name.clone();
+        let container = self.api.containers().get(&service.id);
+        let (snd, recv) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let mut stream = container.logs(
+                &ContainerLogsOpts::builder()
+                    .stderr(true)
+                    .stdout(true)
+                    .follow(true)
+                    .build(),
+            );
+
+            while let Some(chunk) = stream.next().await {
+                let data = match chunk.unwrap() {
+                    podman_api::conn::TtyChunk::StdOut(data) => data,
+                    podman_api::conn::TtyChunk::StdErr(data) => data,
+                    _ => Vec::new(),
+                };
+                let line = LogLine {
+                    name: name.clone(),
+                    data: String::from_utf8(data).unwrap(),
+                };
+
+                if let Err(_) = snd.send(line) {
+                    break;
+                }
+            }
+        });
+
+        tokio_stream::wrappers::UnboundedReceiverStream::new(recv)
     }
 }

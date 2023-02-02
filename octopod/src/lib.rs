@@ -10,7 +10,8 @@ use std::net::IpAddr;
 
 use anyhow::Context;
 use driver::Driver;
-use emitter::{Emitter, TestResult};
+use emitter::{Emitter, LogLine, TestResult};
+use futures::{stream::SelectAll, Stream, StreamExt};
 use resource::Resources;
 use sealed::{TestDecl, TestFn};
 
@@ -107,13 +108,26 @@ impl TestSuite {
     ) -> anyhow::Result<()> {
         for Test { name, f } in &self.tests {
             let app = self.instantiate_app(driver, resources).await?;
+            let mut log_stream = app.logs(driver);
             let fut = f.call(app);
             //FIXME: Maybe we should fork here, and collect stdout
-            let result = match tokio::spawn(fut).await {
-                Ok(_) => TestResult::pass(name),
-                Err(e) => TestResult::fail(name, &e),
-            };
-            emitter.emit(result);
+            let mut test_fut = tokio::spawn(fut);
+            let mut logs = Vec::new();
+            loop {
+                tokio::select! {
+                    res = &mut test_fut => {
+                        let result = match  res {
+                            Ok(_) => TestResult::pass(name, Some(logs)),
+                            Err(e) => TestResult::fail(name, &e, Some(logs)),
+                        };
+                        emitter.emit(result);
+                        break;
+                    }
+                    Some(entry) = log_stream.next() => {
+                        logs.push(entry);
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -138,6 +152,15 @@ pub struct App {
 impl App {
     pub fn service(&self, service: &str) -> Option<&Service> {
         self.services.get(service)
+    }
+
+    fn logs(&self, driver: &Driver) -> impl Stream<Item = LogLine> {
+        let mut streams = SelectAll::new();
+        for service in self.services.values() {
+            streams.push(driver.logs(service));
+        }
+
+        streams
     }
 }
 
@@ -170,6 +193,7 @@ pub struct ServiceConfig {
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct Service {
+    name: String,
     net: Network,
     id: String,
     driver: Driver,
