@@ -91,7 +91,12 @@ impl Driver {
     pub async fn destroy_service(&self, service: &Service) -> anyhow::Result<()> {
         let container = self.api.containers().get(&service.id);
         container
-            .delete(&ContainerDeleteOpts::builder().force(true).build())
+            .delete(
+                &ContainerDeleteOpts::builder()
+                    .force(true)
+                    .timeout(0)
+                    .build(),
+            )
             .await?;
 
         Ok(())

@@ -28,7 +28,6 @@ pub(crate) trait Resource {
 impl Resource for Service {
     async fn free(&self, driver: &Driver) -> anyhow::Result<()> {
         driver.destroy_service(self).await?;
-
         Ok(())
     }
 }
@@ -37,7 +36,6 @@ impl Resource for Service {
 impl Resource for Network {
     async fn free(&self, driver: &Driver) -> anyhow::Result<()> {
         driver.destroy_network(self).await?;
-
         Ok(())
     }
 }
