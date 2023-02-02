@@ -48,7 +48,7 @@ pub fn test(attr: TokenStream, input: TokenStream) -> TokenStream {
     quote! {
         octopod::sealed::inventory::submit!(
             octopod::sealed::TestDecl {
-                name: #fun_name_str,
+                name: concat!(module_path!(), "::", #fun_name_str),
                 f: &#fun_name,
                 app: #app,
             });
