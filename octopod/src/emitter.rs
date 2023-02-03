@@ -5,6 +5,7 @@ use termion::color;
 #[derive(Default)]
 pub struct Emitter {
     results: Vec<TestResult>,
+    pub log_all: bool,
 }
 
 impl Emitter {
@@ -12,7 +13,10 @@ impl Emitter {
         print!("{:.<75}", result.name);
         match result.outcome {
             TestOutcome::Pass => {
-                println!("{}ok{}", color::Fg(color::Green), color::Fg(color::Reset))
+                println!("{}ok{}", color::Fg(color::Green), color::Fg(color::Reset));
+                if self.log_all {
+                    self.results.push(result)
+                }
             }
             TestOutcome::Fail { .. } => {
                 println!("{}FAIL{}", color::Fg(color::Red), color::Fg(color::Reset));
@@ -25,14 +29,19 @@ impl Emitter {
 impl Drop for Emitter {
     fn drop(&mut self) {
         for result in &self.results {
-            if let TestOutcome::Fail { ref output } = result.outcome {
-                println!("=== Test failure: {} ===", result.name);
-                println!("{output}");
-                if let Some(logs) = &result.logs {
-                    println!("Logs:");
-                    for entry in logs {
-                        println!("{entry}");
-                    }
+            match result.outcome {
+                TestOutcome::Pass => {
+                    println!("=== Test ok: {} ===", result.name);
+                }
+                TestOutcome::Fail { ref output } => {
+                    println!("=== Test failure: {} ===", result.name);
+                    println!("{output}");
+                }
+            }
+            if let Some(logs) = &result.logs {
+                println!("Logs:");
+                for entry in logs {
+                    println!("{entry}");
                 }
             }
         }

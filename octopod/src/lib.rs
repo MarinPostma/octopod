@@ -20,6 +20,7 @@ pub use octopod_macros::test;
 pub struct Octopod {
     driver: Driver,
     suites: Vec<TestSuite>,
+    emitter: Emitter,
 }
 
 impl Octopod {
@@ -49,15 +50,28 @@ impl Octopod {
 
         let suites = suites.into_values().collect();
         let driver = Driver::new(podman_addr)?;
+        let emitter = Emitter::default();
 
-        Ok(Self { driver, suites })
+        Ok(Self {
+            driver,
+            suites,
+            emitter,
+        })
     }
 
-    pub async fn run(self) -> anyhow::Result<()> {
-        let mut emitter = Emitter::default();
+    /// print all logs, even successes
+    pub fn log_all(mut self) -> Self {
+        self.emitter.log_all = true;
+        self
+    }
+
+    pub async fn run(mut self) -> anyhow::Result<()> {
         for suite in self.suites {
             let mut resources = Resources::default();
-            if let Err(e) = suite.run(&self.driver, &mut emitter, &mut resources).await {
+            if let Err(e) = suite
+                .run(&self.driver, &mut self.emitter, &mut resources)
+                .await
+            {
                 eprintln!("error running test suite: {e}");
             }
 
