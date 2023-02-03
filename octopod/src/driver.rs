@@ -162,4 +162,14 @@ impl Driver {
 
         Ok(())
     }
+
+    pub(crate) async fn pause(&self, service: &Service) -> anyhow::Result<()> {
+        self.api.containers().get(&service.id).pause().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn unpause(&self, service: &Service) -> anyhow::Result<()> {
+        self.api.containers().get(&service.id).unpause().await?;
+        Ok(())
+    }
 }

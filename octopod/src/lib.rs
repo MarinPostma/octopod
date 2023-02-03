@@ -242,4 +242,14 @@ impl Service {
     pub async fn connect(&self) -> anyhow::Result<()> {
         self.driver.connect(self).await
     }
+
+    /// pauses the service
+    pub async fn pause(&self) -> anyhow::Result<()> {
+        self.driver.pause(self).await
+    }
+
+    /// unpauses the service
+    pub async fn unpause(&self) -> anyhow::Result<()> {
+        self.driver.unpause(self).await
+    }
 }
