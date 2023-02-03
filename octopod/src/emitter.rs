@@ -9,7 +9,7 @@ pub struct Emitter {
 
 impl Emitter {
     pub fn emit(&mut self, result: TestResult) {
-        print!("{:.<60}", result.name);
+        print!("{:.<75}", result.name);
         match result.outcome {
             TestOutcome::Pass => {
                 println!("{}ok{}", color::Fg(color::Green), color::Fg(color::Reset))

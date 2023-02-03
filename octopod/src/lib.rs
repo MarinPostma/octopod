@@ -214,8 +214,18 @@ pub struct Service {
 }
 
 impl Service {
-    /// Ip of this service
+    /// Retrieve the IP address of this service.
     pub async fn ip(&self) -> anyhow::Result<IpAddr> {
         self.driver.get_service_ip(self).await
+    }
+
+    /// Disconnect this service from the network.
+    pub async fn disconnect(&self) -> anyhow::Result<()> {
+        self.driver.disconnect(self).await
+    }
+
+    /// Connect this service back to its network.
+    pub async fn connect(&self) -> anyhow::Result<()> {
+        self.driver.connect(self).await
     }
 }

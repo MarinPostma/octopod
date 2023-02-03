@@ -4,7 +4,10 @@ use anyhow::Context;
 use futures::{Stream, StreamExt};
 use maplit::hashmap;
 use podman_api::{
-    opts::{ContainerCreateOpts, ContainerDeleteOpts, ContainerLogsOpts, NetworkCreateOpts},
+    opts::{
+        ContainerCreateOpts, ContainerDeleteOpts, ContainerLogsOpts, NetworkConnectOpts,
+        NetworkCreateOpts,
+    },
     Podman,
 };
 use uuid::Uuid;
@@ -133,5 +136,30 @@ impl Driver {
         });
 
         tokio_stream::wrappers::UnboundedReceiverStream::new(recv)
+    }
+
+    pub(crate) async fn disconnect(&self, service: &Service) -> anyhow::Result<()> {
+        self.api
+            .containers()
+            .get(&service.id)
+            .disconnect(&service.net.name, true)
+            .await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn connect(&self, service: &Service) -> anyhow::Result<()> {
+        self.api
+            .containers()
+            .get(&service.id)
+            .connect(
+                &service.net.name,
+                &NetworkConnectOpts::builder()
+                    .aliases([&service.name])
+                    .build(),
+            )
+            .await?;
+
+        Ok(())
     }
 }
