@@ -21,7 +21,7 @@ pub use service::{Service, ServiceConfig};
 pub struct Octopod {
     driver: Driver,
     suites: Vec<TestSuite>,
-    emitter: Emitter,
+    log_all: bool,
 }
 
 impl Octopod {
@@ -52,29 +52,25 @@ impl Octopod {
 
         let suites = suites.into_values().collect();
         let driver = Driver::new(podman_addr)?;
-        let emitter = Emitter::default();
 
         Ok(Self {
             driver,
             suites,
-            emitter,
+            log_all: false,
         })
     }
 
     /// print all logs, even successes
     pub fn log_all(mut self) -> Self {
-        self.emitter.log_all = true;
+        self.log_all = true;
         self
     }
 
-    pub async fn run(mut self) -> anyhow::Result<bool> {
+    pub async fn run(self) -> anyhow::Result<bool> {
         let mut success = true;
         for suite in self.suites {
             let mut resources = Resources::default();
-            match suite
-                .run(&self.driver, &mut self.emitter, &mut resources)
-                .await
-            {
+            match suite.run(&self.driver, &mut resources, self.log_all).await {
                 Err(e) => {
                     eprintln!("error running test suite: {e}");
                 }
@@ -126,10 +122,12 @@ impl TestSuite {
     async fn run(
         self,
         driver: &Driver,
-        emitter: &mut Emitter,
         resources: &mut Resources,
+        log_all: bool,
     ) -> anyhow::Result<bool> {
         let mut success = true;
+        let mut emitter = Emitter::new(log_all);
+        println!("running {} tests on {}:", self.tests.len(), self.app.name);
         for Test { name, f, ignore } in &self.tests {
             if *ignore {
                 emitter.emit(TestResult::ignore(name));

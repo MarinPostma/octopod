@@ -1,14 +1,22 @@
-use std::fmt;
+use std::{fmt, time::Instant};
 
 use termion::color;
 
-#[derive(Default)]
 pub struct Emitter {
     results: Vec<TestResult>,
-    pub log_all: bool,
+    log_all: bool,
+    started_at: Instant,
 }
 
 impl Emitter {
+    pub fn new(log_all: bool) -> Self {
+        Self {
+            results: Vec::new(),
+            log_all,
+            started_at: Instant::now(),
+        }
+    }
+
     pub fn emit(&mut self, result: TestResult) {
         print!("{:.<75}", result.name);
         match result.outcome {
@@ -36,16 +44,23 @@ impl Emitter {
 
 impl Drop for Emitter {
     fn drop(&mut self) {
+        let mut passed = 0;
+        let mut failed = 0;
+        let mut ignored = 0;
         for result in &self.results {
             match result.outcome {
                 TestOutcome::Pass => {
+                    passed += 1;
                     println!("=== Test ok: {} ===", result.name);
                 }
                 TestOutcome::Fail { ref output } => {
+                    failed += 1;
                     println!("=== Test failure: {} ===", result.name);
                     println!("{output}");
                 }
-                TestOutcome::Ignore => (),
+                TestOutcome::Ignore => {
+                    ignored += 1;
+                }
             }
             if let Some(logs) = &result.logs {
                 println!("Logs:");
@@ -53,6 +68,23 @@ impl Drop for Emitter {
                     println!("{entry}");
                 }
             }
+
+            println!(
+                "test result: {}. {} passed; {} ignored; {} failed; finished in {:.3?}",
+                if failed == 0 {
+                    format!("{}ok{}", color::Fg(color::Green), color::Fg(color::Reset))
+                } else {
+                    format!(
+                        "{}failure{}",
+                        color::Fg(color::Red),
+                        color::Fg(color::Reset)
+                    )
+                },
+                passed,
+                ignored,
+                failed,
+                self.started_at.elapsed()
+            );
         }
     }
 }
