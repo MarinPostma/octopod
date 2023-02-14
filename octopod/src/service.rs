@@ -22,8 +22,12 @@ impl ServiceConfig {
     }
 
     /// Add environment variables to the service.
-    pub fn env(mut self, env: impl IntoIterator<Item = (String, String)>) -> Self {
-        self.env.extend(env);
+    pub fn env(
+        mut self,
+        env: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
+    ) -> Self {
+        self.env
+            .extend(env.into_iter().map(|(k, v)| (k.into(), v.into())));
         self
     }
 
