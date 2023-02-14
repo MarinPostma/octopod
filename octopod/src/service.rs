@@ -12,10 +12,10 @@ pub struct ServiceConfig {
 }
 
 impl ServiceConfig {
-    pub fn new(name: String, image: String) -> Self {
+    pub fn new(name: impl Into<String>, image: impl Into<String>) -> Self {
         Self {
-            name,
-            image,
+            name: name.into(),
+            image: image.into(),
             env: Vec::new(),
             health: None,
         }
