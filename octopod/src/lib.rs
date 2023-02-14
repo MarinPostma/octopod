@@ -66,20 +66,24 @@ impl Octopod {
         self
     }
 
-    pub async fn run(mut self) -> anyhow::Result<()> {
+    pub async fn run(mut self) -> anyhow::Result<bool> {
+        let mut success = true;
         for suite in self.suites {
             let mut resources = Resources::default();
-            if let Err(e) = suite
+            match suite
                 .run(&self.driver, &mut self.emitter, &mut resources)
                 .await
             {
-                eprintln!("error running test suite: {e}");
+                Err(e) => {
+                    eprintln!("error running test suite: {e}");
+                }
+                Ok(s) => success &= s,
             }
 
             resources.cleanup(&self.driver).await;
         }
 
-        Ok(())
+        Ok(success)
     }
 }
 
@@ -92,6 +96,7 @@ struct TestSuite {
     app: AppConfig,
     tests: Vec<Test>,
 }
+
 impl TestSuite {
     fn new(app: AppConfig) -> Self {
         Self {
@@ -115,12 +120,14 @@ impl TestSuite {
         Ok(App { services })
     }
 
+    /// Returns whether all the tests were successful
     async fn run(
         self,
         driver: &Driver,
         emitter: &mut Emitter,
         resources: &mut Resources,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<bool> {
+        let mut success = true;
         for Test { name, f } in &self.tests {
             let app = self.instantiate_app(driver, resources).await?;
             let mut log_stream = app.logs(driver);
@@ -146,6 +153,8 @@ impl TestSuite {
                                     }
                                     Err(e) => e.to_string(),
                                 };
+                                // at least one test failed
+                                success = false;
                                 TestResult::fail(name, msg, Some(logs))
                             }
                         };
@@ -159,7 +168,7 @@ impl TestSuite {
             }
         }
 
-        Ok(())
+        Ok(success)
     }
 }
 
