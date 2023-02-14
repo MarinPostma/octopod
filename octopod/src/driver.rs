@@ -1,6 +1,6 @@
-use std::net::IpAddr;
+use std::{net::IpAddr, time::Duration};
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use futures::{Stream, StreamExt};
 use maplit::hashmap;
 use podman_api::{
@@ -12,7 +12,12 @@ use podman_api::{
 };
 use uuid::Uuid;
 
-use crate::{emitter::LogLine, resource::Resources, Network, Service, ServiceConfig};
+use crate::{
+    emitter::LogLine,
+    resource::Resources,
+    service::{Service, ServiceConfig},
+    Network,
+};
 
 #[derive(Clone)]
 pub(crate) struct Driver {
@@ -53,6 +58,22 @@ impl Driver {
         let resp = self.api.containers().create(&opts).await?;
         let container = self.api.containers().get(&resp.id);
         container.start(None).await?;
+
+        if let Some(ref url) = config.health {
+            for i in 0..10 {
+                match reqwest::get(url).await {
+                    Ok(resp) if resp.status().is_success() => {
+                        break;
+                    }
+                    _ if i == 9 => {
+                        bail!("Timedout waiting for service");
+                    }
+                    _ => {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                }
+            }
+        }
 
         let service = Service {
             name: config.name.clone(),

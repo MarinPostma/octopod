@@ -1,4 +1,4 @@
-use crate::{driver::Driver, Network, Service};
+use crate::{driver::Driver, service::Service, Network};
 
 #[derive(Default)]
 pub(crate) struct Resources {

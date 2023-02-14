@@ -4,9 +4,9 @@ pub mod sealed;
 mod driver;
 mod emitter;
 mod resource;
+mod service;
 
 use std::collections::HashMap;
-use std::net::IpAddr;
 
 use anyhow::Context;
 use driver::Driver;
@@ -16,6 +16,7 @@ use resource::Resources;
 use sealed::{TestDecl, TestFn};
 
 pub use octopod_macros::test;
+use service::{Service, ServiceConfig};
 
 pub struct Octopod {
     driver: Driver,
@@ -208,48 +209,5 @@ impl AppConfig {
 
     pub fn add_service(&mut self, config: ServiceConfig) {
         self.services.push(config);
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ServiceConfig {
-    pub name: String,
-    pub image: String,
-    pub env: Vec<(String, String)>,
-}
-
-#[derive(Clone)]
-#[allow(dead_code)]
-pub struct Service {
-    name: String,
-    net: Network,
-    id: String,
-    driver: Driver,
-}
-
-impl Service {
-    /// Retrieve the IP address of this service.
-    pub async fn ip(&self) -> anyhow::Result<IpAddr> {
-        self.driver.get_service_ip(self).await
-    }
-
-    /// Disconnect this service from the network.
-    pub async fn disconnect(&self) -> anyhow::Result<()> {
-        self.driver.disconnect(self).await
-    }
-
-    /// Connect this service back to its network.
-    pub async fn connect(&self) -> anyhow::Result<()> {
-        self.driver.connect(self).await
-    }
-
-    /// pauses the service
-    pub async fn pause(&self) -> anyhow::Result<()> {
-        self.driver.pause(self).await
-    }
-
-    /// unpauses the service
-    pub async fn unpause(&self) -> anyhow::Result<()> {
-        self.driver.unpause(self).await
     }
 }
