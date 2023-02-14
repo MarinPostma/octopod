@@ -40,6 +40,7 @@ impl Octopod {
             let test = Test {
                 f: decl.f,
                 name: decl.name.into(),
+                ignore: decl.ignore,
             };
 
             suites
@@ -90,6 +91,7 @@ impl Octopod {
 struct Test {
     f: &'static dyn TestFn,
     name: String,
+    ignore: bool,
 }
 
 struct TestSuite {
@@ -128,7 +130,12 @@ impl TestSuite {
         resources: &mut Resources,
     ) -> anyhow::Result<bool> {
         let mut success = true;
-        for Test { name, f } in &self.tests {
+        for Test { name, f, ignore } in &self.tests {
+            if *ignore {
+                emitter.emit(TestResult::ignore(name));
+                continue;
+            }
+
             let app = self.instantiate_app(driver, resources).await?;
             let mut log_stream = app.logs(driver);
             let fut = f.call(app);

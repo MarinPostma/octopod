@@ -26,4 +26,5 @@ pub struct TestDecl {
     pub name: &'static str,
     pub app: &'static str,
     pub f: &'static dyn TestFn,
+    pub ignore: bool,
 }

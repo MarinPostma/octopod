@@ -22,6 +22,14 @@ impl Emitter {
                 println!("{}FAIL{}", color::Fg(color::Red), color::Fg(color::Reset));
                 self.results.push(result);
             }
+            TestOutcome::Ignore => {
+                println!(
+                    "{}ignored{}",
+                    color::Fg(color::Yellow),
+                    color::Fg(color::Reset)
+                );
+                self.results.push(result);
+            }
         }
     }
 }
@@ -37,6 +45,7 @@ impl Drop for Emitter {
                     println!("=== Test failure: {} ===", result.name);
                     println!("{output}");
                 }
+                TestOutcome::Ignore => (),
             }
             if let Some(logs) = &result.logs {
                 println!("Logs:");
@@ -107,9 +116,18 @@ impl TestResult {
             logs,
         }
     }
+
+    pub fn ignore(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            outcome: TestOutcome::Ignore,
+            logs: None,
+        }
+    }
 }
 
 enum TestOutcome {
     Pass,
     Fail { output: String },
+    Ignore,
 }

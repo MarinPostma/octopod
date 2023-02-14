@@ -51,13 +51,10 @@ pub fn test(attr: TokenStream, input: TokenStream) -> TokenStream {
     let fun = parse_macro_input!(input as ItemFn);
     let params = parse_macro_input!(attr as TestParams);
 
-    if params.ignore {
-        return TokenStream::new();
-    }
-
     let fun_name = &fun.sig.ident;
     let fun_name_str = fun_name.to_string();
     let app = &params.app;
+    let ignore = params.ignore;
 
     quote! {
         octopod::sealed::inventory::submit!(
@@ -65,6 +62,7 @@ pub fn test(attr: TokenStream, input: TokenStream) -> TokenStream {
                 name: concat!(module_path!(), "::", #fun_name_str),
                 f: &#fun_name,
                 app: #app,
+                ignore: #ignore,
             });
 
         #fun
