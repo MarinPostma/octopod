@@ -8,7 +8,7 @@ pub struct ServiceConfig {
     pub(crate) image: String,
     pub(crate) env: Vec<(String, String)>,
     /// Url to health check the service.
-    pub(crate) health: Option<String>,
+    pub(crate) health: Option<(String, u16)>,
 }
 
 impl ServiceConfig {
@@ -34,8 +34,8 @@ impl ServiceConfig {
     /// Set the URL to be checked for health
     /// If set, the octopod will wait for the health route to return success before proceeding to
     /// the tests.
-    pub fn health(mut self, health: String) -> Self {
-        self.health.replace(health);
+    pub fn health(mut self, uri: impl Into<String>, port: u16) -> Self {
+        self.health.replace((uri.into(), port));
         self
     }
 }

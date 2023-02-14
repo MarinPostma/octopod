@@ -59,9 +59,18 @@ impl Driver {
         let container = self.api.containers().get(&resp.id);
         container.start(None).await?;
 
-        if let Some(ref url) = config.health {
+        let service = Service {
+            name: config.name.clone(),
+            id: resp.id,
+            net: net.clone(),
+            driver: self.clone(),
+        };
+
+        if let Some((ref uri, port)) = config.health {
+            let ip = self.get_service_ip(&service).await?;
+            let url = format!("http://{ip}:{port}{uri}");
             for i in 0..10 {
-                match reqwest::get(url).await {
+                match reqwest::get(&url).await {
                     Ok(resp) if resp.status().is_success() => {
                         break;
                     }
@@ -74,13 +83,6 @@ impl Driver {
                 }
             }
         }
-
-        let service = Service {
-            name: config.name.clone(),
-            id: resp.id,
-            net: net.clone(),
-            driver: self.clone(),
-        };
 
         resources.register(service.clone());
 
