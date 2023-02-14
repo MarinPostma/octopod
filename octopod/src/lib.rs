@@ -16,7 +16,7 @@ use resource::Resources;
 use sealed::{TestDecl, TestFn};
 
 pub use octopod_macros::test;
-use service::{Service, ServiceConfig};
+pub use service::{Service, ServiceConfig};
 
 pub struct Octopod {
     driver: Driver,
