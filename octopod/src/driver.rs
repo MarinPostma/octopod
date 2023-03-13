@@ -4,6 +4,7 @@ use anyhow::{bail, Context};
 use futures::{Stream, StreamExt};
 use maplit::hashmap;
 use podman_api::{
+    models::Namespace,
     opts::{
         ContainerCreateOpts, ContainerDeleteOpts, ContainerLogsOpts, NetworkConnectOpts,
         NetworkCreateOpts,
@@ -34,6 +35,7 @@ impl Driver {
         let name = Uuid::new_v4().to_string();
         let opts = NetworkCreateOpts::builder()
             .name(&name)
+            .driver("bridge")
             .dns_enabled(true)
             .build();
         self.api.networks().create(&opts).await?;
@@ -52,6 +54,10 @@ impl Driver {
     ) -> anyhow::Result<Service> {
         let opts = ContainerCreateOpts::builder()
             .networks([(net.name(), hashmap! { "aliases" => vec![&config.name]})])
+            .net_namespace(Namespace {
+                nsmode: Some("bridge".into()),
+                value: None,
+            })
             .image(&config.image)
             .env(config.env.clone())
             .build();
