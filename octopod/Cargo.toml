@@ -8,10 +8,10 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.68"
 futures = "0.3.26"
-# podman-api = "0.8.0"
+podman-api = "0.10.0"
 # podman-api = { git = "https://github.com/vv9k/podman-api-rs.git"}
 
-podman-api = { git = "https://github.com/MarinPostma/podman-api-rs.git", rev = "6bbcabb249a1621f607becc4c5235e3079f84395" }
+#podman-api = { git = "https://github.com/MarinPostma/podman-api-rs.git", rev = "6bbcabb249a1621f607becc4c5235e3079f84395" }
 tokio = { version = "1.25.0", features = ["macros"] }
 uuid = { version = "1.2.2", features = ["v4"] }
 octopod-macros = { path = "../octopod-macros" }
